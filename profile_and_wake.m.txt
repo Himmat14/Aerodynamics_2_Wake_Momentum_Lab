@@ -1,0 +1,190 @@
+clear
+clc
+close all
+
+manodata = readmatrix('Profile and Wake Lab (5).csv');
+
+%% DATA FROM WING TAPPINGS
+
+% chord (m)
+c = 0.1524;
+% freestream values
+P_inf = manodata(2,20);
+q_inf = 0.5*manodata(2,21)*manodata(2,22)^2;
+rho = manodata(2,21);
+% of entire wing
+PatPoint = manodata(2:17,5);
+DeltaP = manodata(2:17,6);
+CP = manodata(2:17,7);
+xoc = manodata(5:20,19);
+yoc = manodata(5:20,20);
+
+% segmented over surfaces:
+
+% top
+top_CP  = manodata(3:2:17,14);
+top_xoc = manodata(6:2:20,19);
+top_yoc = manodata(6:2:20,20);
+top_DeltaP = manodata(3:17,6);
+top_P = manodata(3:17,5);
+% bottom
+bottom_CP = manodata([2:2:16,17],15);
+bottom_xoc = manodata([5:2:19,20],19);
+bottom_yoc = manodata([5:2:19,20],20);
+bottom_DeltaP = manodata([2:2:16,17],6);
+bottom_P = manodata([2:2:16,17],5);
+
+% front
+front_CP = manodata(9:17,7);
+front_xoc = manodata(12:20,19);
+front_yoc = manodata(12:20,20);
+
+% back
+back_CP = manodata(2:9,7);
+back_xoc = manodata(5:12,19);
+back_yoc = manodata(5:12,20);
+
+%% DATA FOR WAKE
+
+active_manometers_index = [1,3,5,7:18,20,22,24];
+CP_wake = manodata(17+active_manometers_index,7);
+P0_wake = manodata(17+active_manometers_index,5);
+DeltaP_wake = manodata(17+active_manometers_index,6);
+
+% position relative to point 1
+pitot_pos = manodata(21:38,21)/100;
+
+subplot(1,2,1);
+hold on
+plot(top_xoc,-top_CP);
+plot(bottom_xoc,-bottom_CP);
+legend('top','bottom')
+xlabel('x/c')
+ylabel('-Cp')
+subplot(1,2,2);
+
+hold on
+plot(front_yoc,-front_CP);
+plot(back_yoc,-back_CP);
+legend('front','back')
+xlabel('y/c')
+ylabel('-Cp')
+
+%% Profile Drag - Wake Integral
+
+Integrand_Array1 = (sqrt((P0_wake-P_inf)./(q_inf)).*sqrt(1-((P0_wake-P_inf)./(q_inf))));
+figure
+subplot(1,2,1)
+plot(pitot_pos,CP_wake)
+subplot(1,2,2)
+plot(pitot_pos,Integrand_Array1)
+CD_profile = (1/c)*trapz(pitot_pos,Integrand_Array1);
+disp(['CD Profile = ', num2str(CD_profile)])
+
+% velocity method
+U_w = manodata(2,22)*sqrt(1-CP_wake);
+
+U_w2 = [26.41833051,26.41833051,26.41833051,26.41833051,26.29573899,25.92448639,25.79954838,25.42105039,25.16555596,25.03683104,25.16555596,25.42105039,25.67400239,26.04882517,26.17257326,26.41833051,26.41833051,26.41833051];
+U_oUinf = U_w2./U_w2(1);
+
+Velo_err = [0.116579345,0.116579345,0.116579345,0.116579345,0.11603837,0.114400099,0.11384877,0.112178527,0.111051076,0.110483036,0.111051076,0.112178527,0.113294759,0.114948784,0.115494862,0.116579345,0.116579345,0.116579345];
+
+figure
+hold on
+plot(pitot_pos,U_w2,'k--',LineWidth=2)
+plot(pitot_pos,U_w2,'rx',LineWidth=2)
+errorbar(pitot_pos,U_w2,Velo_err,'r.',LineWidth=1)
+title('Wake Velocity Plot',FontSize=12)
+ylabel('Measured Airspedpeed (m/s)',FontSize=12)
+xlabel('Position Relative to 1st Pitot Tube (m)',FontSize=12)
+
+
+figure
+hold on
+plot(pitot_pos,U_oUinf,'k--',LineWidth=2)
+plot(pitot_pos,U_oUinf,'rx',LineWidth=2)
+errorbar(pitot_pos,U_oUinf,2*Velo_err/U_w2(1),'r.',LineWidth=1)
+title('Nondimensional Wake Velocity Plot',FontSize=12)
+ylabel('U_w/U_{inf}',FontSize=12)
+xlabel('Position Relative to 1st Pitot Tube (m)',FontSize=12)
+
+
+
+Integrand_Arrayx = U_oUinf.*(1-U_oUinf);
+figure
+hold on
+plot(pitot_pos,Integrand_Arrayx,'k--',LineWidth=2)
+plot(pitot_pos,Integrand_Arrayx,'rx',LineWidth=2)
+errorbar(pitot_pos,Integrand_Arrayx,0.050869*Integrand_Arrayx,'r.',LineWidth=1)
+title('Momentum Deficit (Integrand Plot)',FontSize=12)
+ylabel('Nondimensional Momentum Deficit Integrand',FontSize=12)
+xlabel('Position Relative to 1st Pitot Tube (m)',FontSize=12)
+
+
+CD_x = (2/c)*trapz(pitot_pos,Integrand_Arrayx);
+
+
+
+%% Pressure Drag and Lift
+
+% old vals
+CD_Pressure = (2/c)*(trapz(front_yoc,front_CP)-trapz(back_yoc,back_CP));
+CD_Skin = CD_profile-CD_Pressure;
+disp(['CD Pressure = ', num2str(CD_Pressure)])
+disp(['CD Skin = ', num2str(CD_Skin)])
+poly_front = polyfit(front_yoc,front_CP,3);
+f_front = polyval(poly_front,0:0.001:0.075);
+poly_back = polyfit(back_yoc,back_CP,3);
+f_back = polyval(poly_back,0:0.001:0.075);
+%figure
+%hold on
+%plot(front_yoc,-front_CP)
+%plot(0:0.001:0.075,-f_front)
+%plot(back_yoc,-back_CP)
+%plot(0:0.001:0.075,-f_back)
+CD_PressureBST = (2/c)*(trapz(0:0.001:0.075,f_front-f_back))
+
+% new vals
+CP_e = [0.210,-0.050,0.075,0.117,-0.117,-0.059,-0.293,-0.251,-0.578,-0.662,-0.394,-0.226,0.201,0.495,1.090,1.408];
+CP_eback = CP_e(1:8);
+CP_efront = CP_e(8:16);
+
+[poly_efront,S] = polyfit(front_yoc,CP_efront,4)
+f_efront = polyval(poly_efront,0:0.001:0.075);
+[poly_eback,S] = polyfit(back_yoc,CP_eback,4)
+f_eback = polyval(poly_eback,0:0.001:0.075);
+
+CD_PressureBST2 = (2/c)*(trapz(0:0.001:0.075,f_efront-f_eback))
+
+
+figure
+hold on
+
+plot(front_yoc,CP_efront,'xb',LineWidth=2)
+plot(back_yoc,CP_eback,'ro',LineWidth=2)
+
+plot(0:0.001:0.075,f_efront,'b--',LineWidth=2)
+plot(0:0.001:0.075,f_eback,'r-.',LineWidth=2)
+
+%plot(back_yoc,-CP_eback,'r-.',LineWidth=2)
+%plot(front_yoc,-CP_efront,'b--',LineWidth=2)
+
+errorbar(front_yoc,CP_efront,CP_efront*0.17050753,'b.',LineWidth=1)
+errorbar(back_yoc,CP_eback,CP_eback*0.17050753,'r.',LineWidth=1)
+
+set(gca,'YDir','reverse')
+
+title('Pressure Coefficients, Rear and Front')
+ylabel('Pressure Coefficient, C_P',FontSize=12)
+xlabel('Nondimensional Thickness, y/c',FontSize=12)
+legend('Front Datapoints','Rear Datapoints','4th Order Regression, Front','4th Order Regression, Back',FontSize=12)
+
+
+
+CL_Pressure = (2/c)*(trapz(top_xoc,top_CP)-trapz(bottom_xoc,bottom_CP));
+disp(['CL Pressure = ', num2str(CL_Pressure)])
+
+%% best measurements
+CD_x;
+CD_PressureBST
+CD_skinx = CD_x-CD_PressureBST;
